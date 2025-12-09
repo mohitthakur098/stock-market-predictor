@@ -1,6 +1,12 @@
+numpy
+Cython
+pandas
+scikit-learn
+statsmodels
+matplotlib
 flask
 flask-cors
 yfinance
 prophet
 pystan==2.19.1.1
-pandas
+gunicorn
