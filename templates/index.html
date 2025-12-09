@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Indian Stock Predictor Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background 0.3s, color 0.3s;
+        }
+        body.dark {
+            background: linear-gradient(135deg, #1c1c1c, #2c3e50);
+            color: #fff;
+        }
+        body.light {
+            background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+            color: #333;
+        }
+        header {
+            text-align: center;
+            padding: 30px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        header h1 { margin: 0; font-size: 2.5em; }
+        header p { margin-top: 5px; opacity: 0.9; }
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px auto;
+            max-width: 950px;
+            padding: 0 20px;
+        }
+        .tab {
+            padding: 12px 25px;
+            border: none;
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .tab:hover { background: #764ba2; transform: translateY(-2px); }
+        .tab.active { background: #764ba2; box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
+        .container {
+            max-width: 950px;
+            margin: 20px auto;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            transition: background 0.3s, color 0.3s;
+        }
+        .dark .container { background: rgba(44, 62, 80, 0.9); color: #fff; }
+        .light .container { background: rgba(255, 255, 255, 0.95); color: #333; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+        .dark .metric-card { background: rgba(102, 126, 234, 0.2); }
+        .light .metric-card { background: rgba(102, 126, 234, 0.1); }
+        .metric-card:hover { transform: translateY(-5px); }
+        .metric-card h3 { font-size: 1.8em; margin: 5px 0; color: #667eea; }
+        .metric-card p { font-size: 0.9em; opacity: 0.8; }
+        label {
+            font-weight: bold;
+            margin-top: 15px;
+            display: block;
+            font-size: 1.05em;
+        }
+        select, input[type=number], input[type=text], button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: 2px solid transparent;
+            margin-bottom: 15px;
+            font-size: 1em;
+            transition: 0.3s;
+        }
+        .dark select, .dark input { background: rgba(255,255,255,0.1); color: white; }
+        .light select, .light input { background: white; color: #333; border: 2px solid #ddd; }
+        select:focus, input:focus { outline: none; border-color: #667eea; }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102,126,234,0.4); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        #loader {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #667eea;
+            text-align: center;
+        }
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+        }
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: #aaa;
+            font-size: 0.9em;
+        }
+        #modeToggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            cursor: pointer;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: 0.3s;
+            z-index: 1000;
+        }
+        #modeToggle:hover { background: rgba(255,255,255,0.3); transform: scale(1.05); }
+        .error-message, .success-message {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            display: none;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .error-message { background: #e74c3c; color: white; }
+        .success-message { background: #27ae60; color: white; }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stock-card {
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .dark .stock-card { background: rgba(102, 126, 234, 0.2); }
+        .light .stock-card { background: rgba(102, 126, 234, 0.1); }
+        .stock-card h3 { color: #667eea; margin-bottom: 10px; }
+        .positive { color: #27ae60; }
+        .negative { color: #e74c3c; }
+        .indicator-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        .dark .indicator-legend { background: rgba(255,255,255,0.05); }
+        .light .indicator-legend { background: rgba(0,0,0,0.05); }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="dark">
+    <span id="modeToggle">🌙 Dark Mode</span>
+    <header>
+        <h1>📈 Indian Stock Predictor Dashboard</h1>
+        <p>Advanced ML-powered stock predictions with technical analysis</p>
+    </header>
+
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('predict')">Predict</button>
+        <button class="tab" onclick="switchTab('compare')">Compare Stocks</button>
+        <button class="tab" onclick="switchTab('indicators')">Technical Indicators</button>
+    </div>
+
+    <!-- PREDICT TAB -->
+    <div class="container tab-content active" id="predict-tab">
+        <div id="errorMsg" class="error-message"></div>
+        <div id="successMsg" class="success-message"></div>
+
+        <label for="sector">🏢 Filter by Sector:</label>
+        <select id="sector">
+            <option value="all">All Sectors</option>
+            <option value="IT">Information Technology</option>
+            <option value="Banking">Banking & Finance</option>
+            <option value="FMCG">FMCG</option>
+            <option value="Automobile">Automobile</option>
+            <option value="Pharma">Pharmaceuticals</option>
+        </select>
+
+        <label for="ticker">📊 Choose a Stock:</label>
+        <select id="ticker">
+            <option value="RELIANCE.NS" data-sector="FMCG">Reliance Industries</option>
+            <option value="TCS.NS" data-sector="IT">Tata Consultancy Services</option>
+            <option value="INFY.NS" data-sector="IT">Infosys</option>
+            <option value="HDFC.NS" data-sector="Banking">HDFC Bank</option>
+            <option value="ICICIBANK.NS" data-sector="Banking">ICICI Bank</option>
+            <option value="HINDUNILVR.NS" data-sector="FMCG">Hindustan Unilever</option>
+            <option value="LT.NS" data-sector="Automobile">Larsen & Toubro</option>
+            <option value="ITC.NS" data-sector="FMCG">ITC Ltd</option>
+            <option value="BAJFINANCE.NS" data-sector="Banking">Bajaj Finance</option>
+            <option value="MARUTI.NS" data-sector="Automobile">Maruti Suzuki</option>
+            <option value="BHARTIARTL.NS" data-sector="Telecom">Bharti Airtel</option>
+            <option value="TATAMOTORS.NS" data-sector="Automobile">Tata Motors</option>
+            <option value="AXISBANK.NS" data-sector="Banking">Axis Bank</option>
+            <option value="SBIN.NS" data-sector="Banking">State Bank of India</option>
+            <option value="DRREDDY.NS" data-sector="Pharma">Dr. Reddy's Labs</option>
+            <option value="CIPLA.NS" data-sector="Pharma">Cipla Ltd</option>
+        </select>
+
+        <label for="strategy">🤖 Choose Prediction Strategy:</label>
+        <select id="strategy">
+            <option value="moving_avg">Moving Average (Fast & Simple)</option>
+            <option value="linear_regression">Linear Regression (Trend Analysis)</option>
+            <option value="holt_winters">Exponential Smoothing (Holt-Winters)</option>
+            <option value="arima">ARIMA (Advanced Statistical)</option>
+            <option value="random_forest">Random Forest (Machine Learning) 🆕</option>
+            <option value="prophet">Prophet (Facebook's ML Model)</option>
+        </select>
+
+        <label for="days">📅 Predict Future Days (Business Days):</label>
+        <input type="number" id="days" value="30" min="1" max="90">
+
+        <button id="predictBtn">🚀 Generate Prediction</button>
+        
+        <div id="loader">
+            <div class="spinner"></div>
+            Analyzing stock data...
+        </div>
+
+        <div id="metricsContainer" style="display:none;">
+            <h2 style="margin: 30px 0 15px 0;">📊 Stock Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <p>Current Price</p>
+                    <h3 id="currentPrice">-</h3>
+                </div>
+                <div class="metric-card">
+                    <p>30-Day Trend</p>
+                    <h3 id="trend30d">-</h3>
+                </div>
+                <div class="metric-card">
+                    <p>Volatility</p>
+                    <h3 id="volatility">-</h3>
+                </div>
+                <div class="metric-card">
+                    <p>52W High</p>
+                    <h3 id="high52w">-</h3>
+                </div>
+                <div class="metric-card">
+                    <p>52W Low</p>
+                    <h3 id="low52w">-</h3>
+                </div>
+            </div>
+        </div>
+
+        <div id="chart"></div>
+        <button id="downloadBtn" style="display:none;">💾 Download Chart</button>
+
+        <table id="forecastTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Predicted Price (₹)</th>
+                    <th>Lower Bound (₹)</th>
+                    <th>Upper Bound (₹)</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- COMPARE TAB -->
+    <div class="container tab-content" id="compare-tab">
+        <h2>📊 Compare Multiple Stocks</h2>
+        <p style="margin: 10px 0; opacity: 0.8;">Compare up to 5 stocks side by side (1-year performance)</p>
+        
+        <label for="compareTickers">Enter Stock Symbols (comma-separated):</label>
+        <input type="text" id="compareTickers" placeholder="e.g., TCS.NS, INFY.NS, WIPRO.NS" value="TCS.NS, INFY.NS, HDFC.NS">
+        
+        <button id="compareBtn">📈 Compare Stocks</button>
+        
+        <div id="compareLoader" style="display:none;">
+            <div class="spinner"></div>
+            Comparing stocks...
+        </div>
+        
+        <div id="comparisonResults" class="comparison-grid"></div>
+    </div>
+
+    <!-- INDICATORS TAB -->
+    <div class="container tab-content" id="indicators-tab">
+        <h2>📈 Technical Indicators Guide</h2>
+        
+        <div class="indicator-legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #3498db;"></div>
+                <span><strong>MA20:</strong> 20-day Moving Average</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e74c3c;"></div>
+                <span><strong>MA50:</strong> 50-day Moving Average</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #f39c12;"></div>
+                <span><strong>RSI:</strong> Relative Strength Index</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #9b59b6;"></div>
+                <span><strong>MACD:</strong> Moving Average Convergence Divergence</span>
+            </div>
+        </div>
+
+        <div style="margin-top: 30px;">
+            <h3 style="color: #667eea; margin-bottom: 15px;">🎯 What do these indicators mean?</h3>
+            
+            <div style="padding: 20px; border-left: 4px solid #667eea; margin: 15px 0;">
+                <h4>RSI (Relative Strength Index)</h4>
+                <p>• Above 70 = Overbought (might fall soon) 📉</p>
+                <p>• Below 30 = Oversold (might rise soon) 📈</p>
+                <p>• Between 30-70 = Normal range</p>
+            </div>
+
+            <div style="padding: 20px; border-left: 4px solid #667eea; margin: 15px 0;">
+                <h4>MACD (Trend Momentum)</h4>
+                <p>• Positive MACD = Upward momentum 🚀</p>
+                <p>• Negative MACD = Downward momentum ⬇️</p>
+                <p>• Crossing signal line = Potential trend change</p>
+            </div>
+
+            <div style="padding: 20px; border-left: 4px solid #667eea; margin: 15px 0;">
+                <h4>Moving Averages (MA20, MA50)</h4>
+                <p>• Price above MA = Bullish trend 📈</p>
+                <p>• Price below MA = Bearish trend 📉</p>
+                <p>• MA20 crossing above MA50 = "Golden Cross" (bullish signal)</p>
+            </div>
+
+            <div style="padding: 20px; border-left: 4px solid #667eea; margin: 15px 0;">
+                <h4>Volatility</h4>
+                <p>• Low volatility (<15%) = Stable stock</p>
+                <p>• Medium volatility (15-30%) = Moderate risk</p>
+                <p>• High volatility (>30%) = Risky stock</p>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Made with ❤️ for Indian Stock Market Analysis</p>
+        <p style="font-size: 0.8em; margin-top: 10px;">Disclaimer: Predictions are for educational purposes only. Always do your own research before investing.</p>
+    </footer>
+
+    <script>
+        const predictBtn = document.getElementById('predictBtn');
+        const compareBtn = document.getElementById('compareBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const loader = document.getElementById('loader');
+        const table = document.getElementById('forecastTable');
+        const tbody = table.querySelector('tbody');
+        const modeToggle = document.getElementById('modeToggle');
+        const errorMsg = document.getElementById('errorMsg');
+        const successMsg = document.getElementById('successMsg');
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        // Show/hide messages
+        function showError(message) {
+            errorMsg.textContent = message;
+            errorMsg.style.display = 'block';
+            successMsg.style.display = 'none';
+            setTimeout(() => errorMsg.style.display = 'none', 5000);
+        }
+
+        function showSuccess(message) {
+            successMsg.textContent = message;
+            successMsg.style.display = 'block';
+            errorMsg.style.display = 'none';
+            setTimeout(() => successMsg.style.display = 'none', 3000);
+        }
+
+        // Dark/Light mode toggle
+        modeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark');
+            document.body.classList.toggle('light');
+            modeToggle.textContent = document.body.classList.contains('dark') ? '🌙 Dark Mode' : '☀️ Light Mode';
+        });
+
+        // Sector filter
+        document.getElementById('sector').addEventListener('change', function() {
+            const selectedSector = this.value;
+            const tickerSelect = document.getElementById('ticker');
+            Array.from(tickerSelect.options).forEach(option => {
+                option.style.display = (selectedSector === 'all' || option.dataset.sector === selectedSector) ? 'block' : 'none';
+            });
+        });
+
+        // Prediction
+        predictBtn.addEventListener('click', () => {
+            const ticker = document.getElementById('ticker').value;
+            const days = document.getElementById('days').value;
+            const strategy = document.getElementById('strategy').value;
+
+            predictBtn.disabled = true;
+            loader.style.display = 'block';
+            table.style.display = 'none';
+            downloadBtn.style.display = 'none';
+            document.getElementById('metricsContainer').style.display = 'none';
+            errorMsg.style.display = 'none';
+            successMsg.style.display = 'none';
+
+            fetch(`/predict?ticker=${ticker}&future_days=${days}&strategy=${strategy}`)
+                .then(response => response.json())
+                .then(data => {
+                    loader.style.display = 'none';
+                    predictBtn.disabled = false;
+
+                    if (data.error) {
+                        showError('Error: ' + data.error);
+                        return;
+                    }
+
+                    // Show metrics
+                    document.getElementById('metricsContainer').style.display = 'block';
+                    document.getElementById('currentPrice').textContent = '₹' + data.last_close.toFixed(2);
+                    document.getElementById('trend30d').textContent = data.metrics.trend_30d + '%';
+                    document.getElementById('trend30d').className = data.metrics.trend_30d >= 0 ? 'positive' : 'negative';
+                    document.getElementById('volatility').textContent = data.metrics.volatility + '%';
+                    document.getElementById('high52w').textContent = '₹' + data.metrics.high_52w;
+                    document.getElementById('low52w').textContent = '₹' + data.metrics.low_52w;
+
+                    const dates = data.forecast.map(d => d.ds);
+                    const yhat = data.forecast.map(d => d.yhat);
+                    const yhat_upper = data.forecast.map(d => d.yhat_upper);
+                    const yhat_lower = data.forecast.map(d => d.yhat_lower);
+
+                    const histDates = data.history.map(h => h.ds);
+                    const histPrices = data.history.map(h => h.close);
+                    const histMA20 = data.history.map(h => h.ma20);
+                    const histMA50 = data.history.map(h => h.ma50);
+
+                    showSuccess(`Prediction completed using ${strategy.replace('_', ' ').toUpperCase()}!`);
+
+                    const traceHist = {
+                        x: histDates,
+                        y: histPrices,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'Historical Price',
+                        line: {color: '#3498db', width: 2}
+                    };
+
+                    const traceMA20 = {
+                        x: histDates,
+                        y: histMA20,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'MA20',
+                        line: {color: '#2ecc71', width: 1, dash: 'dot'}
+                    };
+
+                    const traceMA50 = {
+                        x: histDates,
+                        y: histMA50,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'MA50',
+                        line: {color: '#e74c3c', width: 1, dash: 'dot'}
+                    };
+
+                    const trace1 = {
+                        x: dates,
+                        y: yhat,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: 'Predicted Price',
+                        line: {color: '#f39c12', width: 3}
+                    };
+
+                    const trace2 = {
+                        x: dates,
+                        y: yhat_upper,
+                        type: 'scatter',
+                        fill: 'tonexty',
+                        name: 'Upper Bound',
+                        line: {color: '#e67e22'},
+                        opacity: 0.3
+                    };
+
+                    const trace3 = {
+                        x: dates,
+                        y: yhat_lower,
+                        type: 'scatter',
+                        fill: 'tonexty',
+                        name: 'Lower Bound',
+                        line: {color: '#e74c3c'},
+                        opacity: 0.3
+                    };
+
+                    const layout = {
+                        title: `${data.ticker} - ${strategy.replace('_',' ').toUpperCase()} Prediction`,
+                        xaxis: {title: 'Date'},
+                        yaxis: {title: 'Price (₹)'},
+                        paper_bgcolor: document.body.classList.contains('dark') ? 'rgba(44, 62, 80, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+                        plot_bgcolor: document.body.classList.contains('dark') ? 'rgba(44, 62, 80, 0.5)' : 'rgba(240, 240, 240, 0.8)',
+                        font: {color: document.body.classList.contains('dark') ? '#fff' : '#333'}
+                    };
+
+                    Plotly.newPlot('chart', [traceHist, traceMA20, traceMA50, trace3, trace2, trace1], layout, {responsive:true});
+                    downloadBtn.style.display = 'inline-block';
+
+                    tbody.innerHTML = '';
+                    data.forecast.forEach(f => {
+                        const row = `<tr>
+                            <td>${f.ds}</td>
+                            <td>₹${f.yhat.toFixed(2)}</td>
+                            <td>₹${f.yhat_lower.toFixed(2)}</td>
+                            <td>₹${f.yhat_upper.toFixed(2)}</td>
+                        </tr>`;
+                        tbody.innerHTML += row;
+                    });
+                    table.style.display = 'table';
+                })
+                .catch(err => {
+                    loader.style.display = 'none';
+                    predictBtn.disabled = false;
+                    showError('Prediction failed: ' + err.message);
+                });
+        });
+
+        // Compare stocks
+        compareBtn.addEventListener('click', () => {
+            const tickers = document.getElementById('compareTickers').value;
+            document.getElementById('compareLoader').style.display = 'block';
+            document.getElementById('comparisonResults').innerHTML = '';
+
+            fetch(`/compare?tickers=${encodeURIComponent(tickers)}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('compareLoader').style.display = 'none';
+                    
+                    const container = document.getElementById('comparisonResults');
+                    Object.keys(data).forEach(ticker => {
+                        const stock = data[ticker];
+                        const card = document.createElement('div');
+                        card.className = 'stock-card';
+                        card.innerHTML = `
+                            <h3>${ticker}</h3>
+                            <p><strong>Current:</strong> ₹${stock.current_price}</p>
+                            <p class="${stock.returns_1y >= 0 ? 'positive' : 'negative'}">
+                                <strong>1Y Returns:</strong> ${stock.returns_1y}%
+                            </p>
+                            <p><strong>Volatility:</strong> ${stock.volatility}%</p>
+                            <p class="${stock.trend_30d >= 0 ? 'positive' : 'negative'}">
+                                <strong>30D Trend:</strong> ${stock.trend_30d}%
+                            </p>
+                        `;
+                        container.appendChild(card);
+                    });
+                })
+                .catch(err => {
+                    document.getElementById('compareLoader').style.display = 'none';
+                    alert('Comparison failed: ' + err.message);
+                });
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            Plotly.downloadImage(document.getElementById('chart'), {format: 'png', filename: 'stock_prediction'});
+        });
+    </script>
+</body>
+</html>
