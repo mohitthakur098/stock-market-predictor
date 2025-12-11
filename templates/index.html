@@ -241,22 +241,22 @@
 
         <label for="ticker">📊 Choose a Stock:</label>
         <select id="ticker">
-            <option value="RELIANCE.NS" data-sector="FMCG">Reliance Industries</option>
-            <option value="TCS.NS" data-sector="IT">Tata Consultancy Services</option>
-            <option value="INFY.NS" data-sector="IT">Infosys</option>
-            <option value="HDFC.NS" data-sector="Banking">HDFC Bank</option>
-            <option value="ICICIBANK.NS" data-sector="Banking">ICICI Bank</option>
-            <option value="HINDUNILVR.NS" data-sector="FMCG">Hindustan Unilever</option>
-            <option value="LT.NS" data-sector="Automobile">Larsen & Toubro</option>
-            <option value="ITC.NS" data-sector="FMCG">ITC Ltd</option>
-            <option value="BAJFINANCE.NS" data-sector="Banking">Bajaj Finance</option>
-            <option value="MARUTI.NS" data-sector="Automobile">Maruti Suzuki</option>
-            <option value="BHARTIARTL.NS" data-sector="Telecom">Bharti Airtel</option>
-            <option value="TATAMOTORS.NS" data-sector="Automobile">Tata Motors</option>
-            <option value="AXISBANK.NS" data-sector="Banking">Axis Bank</option>
-            <option value="SBIN.NS" data-sector="Banking">State Bank of India</option>
-            <option value="DRREDDY.NS" data-sector="Pharma">Dr. Reddy's Labs</option>
-            <option value="CIPLA.NS" data-sector="Pharma">Cipla Ltd</option>
+            <option value="RELIANCE.BO" data-sector="FMCG">Reliance Industries</option>
+            <option value="TCS.BO" data-sector="IT">Tata Consultancy Services</option>
+            <option value="INFY.BO" data-sector="IT">Infosys</option>
+            <option value="HDFCBANK.BO" data-sector="Banking">HDFC Bank</option>
+            <option value="ICICIBANK.BO" data-sector="Banking">ICICI Bank</option>
+            <option value="HINDUNILVR.BO" data-sector="FMCG">Hindustan Unilever</option>
+            <option value="LT.BO" data-sector="Automobile">Larsen & Toubro</option>
+            <option value="ITC.BO" data-sector="FMCG">ITC Ltd</option>
+            <option value="BAJFINANCE.BO" data-sector="Banking">Bajaj Finance</option>
+            <option value="MARUTI.BO" data-sector="Automobile">Maruti Suzuki</option>
+            <option value="BHARTIARTL.BO" data-sector="Telecom">Bharti Airtel</option>
+            <option value="TATAMOTORS.BO" data-sector="Automobile">Tata Motors</option>
+            <option value="AXISBANK.BO" data-sector="Banking">Axis Bank</option>
+            <option value="SBIN.BO" data-sector="Banking">State Bank of India</option>
+            <option value="DRREDDY.BO" data-sector="Pharma">Dr. Reddy's Labs</option>
+            <option value="CIPLA.BO" data-sector="Pharma">Cipla Ltd</option>
         </select>
 
         <label for="strategy">🤖 Choose Prediction Strategy:</label>
@@ -327,7 +327,7 @@
         <p style="margin: 10px 0; opacity: 0.8;">Compare up to 5 stocks side by side (1-year performance)</p>
         
         <label for="compareTickers">Enter Stock Symbols (comma-separated):</label>
-        <input type="text" id="compareTickers" placeholder="e.g., TCS.NS, INFY.NS, WIPRO.NS" value="TCS.NS, INFY.NS, HDFC.NS">
+        <input type="text" id="compareTickers" placeholder="e.g., TCS.BO, INFY.BO, HDFCBANK.BO" value="TCS.BO, INFY.BO, HDFCBANK.BO">
         
         <button id="compareBtn">📈 Compare Stocks</button>
         
@@ -450,11 +450,24 @@
             });
         });
 
+        // Ticker format helper function
+        function normalizeTicker(ticker) {
+            // If user manually types .NS, convert to .BO for better compatibility
+            if (ticker.endsWith('.NS')) {
+                console.log(`Converting ${ticker} to ${ticker.replace('.NS', '.BO')} for better yfinance compatibility`);
+                return ticker.replace('.NS', '.BO');
+            }
+            return ticker;
+        }
+
         // Prediction
         predictBtn.addEventListener('click', () => {
-            const ticker = document.getElementById('ticker').value;
+            let ticker = document.getElementById('ticker').value;
             const days = document.getElementById('days').value;
             const strategy = document.getElementById('strategy').value;
+
+            // Normalize ticker format
+            ticker = normalizeTicker(ticker);
 
             predictBtn.disabled = true;
             loader.style.display = 'block';
@@ -464,7 +477,7 @@
             errorMsg.style.display = 'none';
             successMsg.style.display = 'none';
 
-            fetch(`/predict?ticker=${ticker}&future_days=${days}&strategy=${strategy}`)
+            fetch(`/predict?ticker=${encodeURIComponent(ticker)}&future_days=${days}&strategy=${strategy}`)
                 .then(response => response.json())
                 .then(data => {
                     loader.style.display = 'none';
@@ -585,7 +598,11 @@
 
         // Compare stocks
         compareBtn.addEventListener('click', () => {
-            const tickers = document.getElementById('compareTickers').value;
+            let tickers = document.getElementById('compareTickers').value;
+            
+            // Normalize all tickers in the list
+            tickers = tickers.split(',').map(t => normalizeTicker(t.trim())).join(',');
+            
             document.getElementById('compareLoader').style.display = 'block';
             document.getElementById('comparisonResults').innerHTML = '';
 
