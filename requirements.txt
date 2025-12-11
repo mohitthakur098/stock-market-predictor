@@ -1,10 +1,14 @@
+# ===== REQUIRED BUILD TOOLS FOR PYTHON 3.12 =====
+setuptools>=68.0.0
+wheel>=0.40.0
+
 # Core dependencies
 flask==3.0.0
 flask-cors==4.0.0
 gunicorn==21.2.0
 
 # Data processing
-numpy==1.24.3
+numpy>=1.24.4,<2.0.0  # Version 1.24.4 has Python 3.12 wheels
 pandas==2.0.3
 
 # Machine Learning
