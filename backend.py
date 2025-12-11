@@ -8,40 +8,36 @@ import pathlib
 import logging
 from datetime import datetime, timedelta
 import warnings
-import os
 warnings.filterwarnings('ignore')
 
 # Set matplotlib backend BEFORE importing Prophet
 import matplotlib
 matplotlib.use('Agg')
 
-# Prophet import (optional - app works without it)
+# Prophet import
 Prophet = None
 try:
     from prophet import Prophet
     print("✓ Prophet loaded successfully")
 except Exception as e:
     print(f"⚠ Prophet not available: {e}")
-    print("⚠ App will work with other 5 prediction methods")
 
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.tsa.arima.model import ARIMA
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-# Logging setup
 LOG_PATH = pathlib.Path("error.log")
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s'
-)
+logging.basicConfig(filename='backend_debug.log', level=logging.DEBUG,
+                    format='%(asctime)s %(levelname)s %(message)s')
 
-print("=" * 60)
-print("Stock Market Predictor Server Starting...")
-print("=" * 60)
+print("=" * 50)
+print("Enhanced Indian Stock Predictor Server Starting...")
+print("=" * 50)
 
 # Helper functions
 def ensure_1d_series(col):
@@ -139,6 +135,7 @@ def predict_prophet(df, days):
     df_prophet = df_local[['Close']].reset_index().rename(columns={'Date':'ds','Close':'y'})
     df_prophet['ds'] = pd.to_datetime(df_prophet['ds'])
 
+    import logging
     logging.getLogger('prophet').setLevel(logging.WARNING)
     logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
     
@@ -256,7 +253,7 @@ def predict_arima(df, days):
     return forecast.to_dict(orient='records')
 
 def predict_random_forest(df, days):
-    """Random Forest prediction using technical features"""
+    """NEW: Random Forest prediction using technical features"""
     df_local = df.copy().sort_index()
     close_ser = ensure_1d_series(df_local['Close'])
     close_ser = pd.to_numeric(close_ser, errors='coerce')
@@ -306,11 +303,6 @@ def predict_random_forest(df, days):
 def index():
     return render_template('index.html')
 
-@app.route('/health')
-def health():
-    """Health check endpoint for Render"""
-    return jsonify({'status': 'healthy', 'prophet_available': Prophet is not None})
-
 @app.route('/predict')
 def predict():
     ticker = request.args.get('ticker')
@@ -332,7 +324,7 @@ def predict():
             'error': 'Prophet is not available. Please try another prediction method.'
         }), 400
 
-    logging.info(f"Fetching data for {ticker}...")
+    print(f"\n→ Fetching data for {ticker}...")
 
     try:
         df = yf.download(ticker, period='2y', interval='1d', progress=False, auto_adjust=True)
@@ -340,7 +332,7 @@ def predict():
         if df.empty:
             return jsonify({'error': f"No data found for ticker '{ticker}'. Please check the ticker symbol."}), 404
         
-        logging.info(f"Downloaded {len(df)} data points")
+        print(f"✓ Downloaded {len(df)} data points")
             
     except Exception as e:
         tb = traceback.format_exc()
@@ -365,7 +357,7 @@ def predict():
 
     try:
         last_close = float(df['Close'].iloc[-1])
-        logging.info(f"Last close price: ₹{last_close:.2f}")
+        print(f"✓ Last close price: ₹{last_close:.2f}")
     except Exception:
         last_close = None
 
@@ -388,7 +380,7 @@ def predict():
         logging.error(f"Error preparing history: {str(e)}")
         history = []
 
-    logging.info(f"Running {strategy} prediction for {future_days} days...")
+    print(f"→ Running {strategy} prediction for {future_days} days...")
 
     try:
         if strategy == 'prophet':
@@ -406,7 +398,7 @@ def predict():
         else:
             return jsonify({'error': 'Invalid strategy'}), 400
 
-        logging.info(f"Prediction completed successfully!")
+        print(f"✓ Prediction completed successfully!\n")
 
         return jsonify({
             'ticker': ticker.upper(),
@@ -418,12 +410,16 @@ def predict():
         
     except Exception as e:
         tb = traceback.format_exc()
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"\n\n=== ERROR at predict for {ticker} ===\n")
+            f.write(tb)
         logging.error(tb)
+        print(f"✗ Error: {str(e)}\n")
         return jsonify({'error': 'Prediction failed', 'details': str(e)}), 500
 
 @app.route('/compare')
 def compare():
-    """Compare multiple stocks"""
+    """NEW: Compare multiple stocks"""
     tickers = request.args.get('tickers', '').split(',')
     tickers = [t.strip() for t in tickers if t.strip()]
     
