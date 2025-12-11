@@ -1,7 +1,5 @@
-
 import os
-
-
+import time
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import yfinance as yf
@@ -14,11 +12,11 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-# Set matplotlib backend BEFORE importing Prophet
+# Set matplotlib backend
 import matplotlib
 matplotlib.use('Agg')
 
-# Prophet import
+# Prophet import (optional)
 Prophet = None
 try:
     from prophet import Prophet
@@ -30,20 +28,118 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.tsa.arima.model import ARIMA
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import StandardScaler
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
-LOG_PATH = pathlib.Path("error.log")
-logging.basicConfig(filename='backend_debug.log', level=logging.DEBUG,
-                    format='%(asctime)s %(levelname)s %(message)s')
+# Enhanced logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('backend_debug.log')
+    ]
+)
 
-print("=" * 50)
-print("Enhanced Indian Stock Predictor Server Starting...")
-print("=" * 50)
+print("=" * 60)
+print("🇮🇳 Enhanced Indian Stock Predictor Server Starting...")
+print("=" * 60)
 
-# Helper functions
+# ========== ENHANCED TICKER HANDLING FOR INDIAN STOCKS ==========
+
+# Mapping of Indian stock names to their working yfinance symbols
+INDIAN_STOCK_MAP = {
+    # NSE Stocks (usually work with .NS)
+    'RELIANCE': 'RELIANCE.NS',
+    'TCS': 'TCS.NS', 
+    'INFY': 'INFY.NS',
+    'HDFCBANK': 'HDFCBANK.NS',
+    'ICICIBANK': 'ICICIBANK.NS',
+    'HINDUNILVR': 'HINDUNILVR.NS',
+    'ITC': 'ITC.NS',
+    'SBIN': 'SBIN.NS',
+    'BHARTIARTL': 'BHARTIARTL.NS',
+    'KOTAKBANK': 'KOTAKBANK.NS',
+    'AXISBANK': 'AXISBANK.NS',
+    'LT': 'LT.NS',
+    'MARUTI': 'MARUTI.NS',
+    'TITAN': 'TITAN.NS',
+    'BAJFINANCE': 'BAJFINANCE.NS',
+    'WIPRO': 'WIPRO.NS',
+    'ONGC': 'ONGC.NS',
+    'NTPC': 'NTPC.NS',
+    'POWERGRID': 'POWERGRID.NS',
+    
+    # BSE Stocks (fallback with .BO)
+    'RELIANCE_BO': 'RELIANCE.BO',
+    'TCS_BO': 'TCS.BO',
+    'INFY_BO': 'INFY.BO',
+}
+
+def get_working_ticker(ticker):
+    """Convert input ticker to working yfinance format for Indian stocks"""
+    original_ticker = ticker.upper().strip()
+    
+    # If already has suffix, return as-is
+    if '.' in original_ticker:
+        return original_ticker
+    
+    # Try to find in our map
+    if original_ticker in INDIAN_STOCK_MAP:
+        return INDIAN_STOCK_MAP[original_ticker]
+    
+    # Default: add .NS suffix for Indian stocks
+    return f"{original_ticker}.NS"
+
+def download_indian_stock(ticker, max_retries=3):
+    """Enhanced download specifically for Indian stocks on Render"""
+    
+    working_ticker = get_working_ticker(ticker)
+    print(f"📡 Attempting to fetch: {working_ticker}")
+    
+    for attempt in range(max_retries):
+        try:
+            # Try different strategies
+            if attempt == 0:
+                # Strategy 1: Normal download
+                df = yf.download(working_ticker, period='1y', interval='1d', 
+                                progress=False, threads=False, timeout=10)
+            elif attempt == 1:
+                # Strategy 2: Shorter period
+                df = yf.download(working_ticker, period='6mo', interval='1d',
+                                progress=False, threads=False, timeout=10)
+            elif attempt == 2:
+                # Strategy 3: Try .BO if .NS fails
+                if working_ticker.endswith('.NS'):
+                    alt_ticker = working_ticker.replace('.NS', '.BO')
+                    print(f"🔄 Trying alternative: {alt_ticker}")
+                    df = yf.download(alt_ticker, period='6mo', interval='1d',
+                                    progress=False, threads=False, timeout=10)
+                else:
+                    continue
+            
+            if not df.empty:
+                print(f"✅ Success! Got {len(df)} days of data")
+                return df
+                
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {str(e)[:100]}")
+            time.sleep(1)  # Brief pause
+    
+    # Final attempt with minimal parameters
+    try:
+        print("🔄 Final attempt with minimal parameters...")
+        df = yf.download(working_ticker, period='3mo', progress=False)
+        if not df.empty:
+            return df
+    except:
+        pass
+    
+    return pd.DataFrame()
+
+# ========== HELPER FUNCTIONS ==========
+
 def ensure_1d_series(col):
     if isinstance(col, pd.Series):
         return col
@@ -113,7 +209,8 @@ def get_stock_metrics(df):
         'low_52w': round(low_52w, 2)
     }
 
-# --- Prediction helpers ---
+# ========== PREDICTION FUNCTIONS ==========
+
 def predict_prophet(df, days):
     if Prophet is None:
         raise RuntimeError("Prophet not installed. Please use another prediction method.")
@@ -121,12 +218,6 @@ def predict_prophet(df, days):
     df_local = df.copy().sort_index()
     if df_local.empty:
         raise ValueError("Input dataframe is empty.")
-
-    if not isinstance(df_local.index, pd.DatetimeIndex):
-        df_local.index = pd.to_datetime(df_local.index)
-
-    if df_local.index.tz is not None:
-        df_local.index = df_local.index.tz_localize(None)
 
     close_ser = ensure_1d_series(df_local['Close'])
     close_ser = pd.to_numeric(close_ser, errors='coerce')
@@ -139,10 +230,6 @@ def predict_prophet(df, days):
     df_prophet = df_local[['Close']].reset_index().rename(columns={'Date':'ds','Close':'y'})
     df_prophet['ds'] = pd.to_datetime(df_prophet['ds'])
 
-    import logging
-    logging.getLogger('prophet').setLevel(logging.WARNING)
-    logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
-    
     m = Prophet(
         daily_seasonality=True, 
         yearly_seasonality=True, 
@@ -257,7 +344,7 @@ def predict_arima(df, days):
     return forecast.to_dict(orient='records')
 
 def predict_random_forest(df, days):
-    """NEW: Random Forest prediction using technical features"""
+    """Random Forest prediction using technical features"""
     df_local = df.copy().sort_index()
     close_ser = ensure_1d_series(df_local['Close'])
     close_ser = pd.to_numeric(close_ser, errors='coerce')
@@ -302,52 +389,69 @@ def predict_random_forest(df, days):
     forecast['ds'] = pd.to_datetime(forecast['ds']).dt.strftime('%Y-%m-%d')
     return forecast.to_dict(orient='records')
 
-# --- Routes ---
+# ========== ROUTES ==========
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'server_time': datetime.now().isoformat(),
+        'prophet_available': Prophet is not None,
+        'indian_stocks_supported': list(INDIAN_STOCK_MAP.keys())[:10]
+    })
+
 @app.route('/predict')
 def predict():
-    ticker = request.args.get('ticker')
+    """Main prediction endpoint for Indian stocks"""
+    ticker = request.args.get('ticker', '').strip()
     if not ticker:
-        return jsonify({'error': "Missing 'ticker' parameter"}), 400
+        return jsonify({
+            'error': "Missing 'ticker' parameter",
+            'example': "/predict?ticker=RELIANCE&future_days=30&strategy=moving_avg",
+            'supported_stocks': list(INDIAN_STOCK_MAP.keys())
+        }), 400
 
     try:
         future_days = int(request.args.get('future_days', 30))
     except ValueError:
         return jsonify({'error': "'future_days' must be an integer"}), 400
     
-    if future_days < 1 or future_days > 180:
-        return jsonify({'error': "'future_days' must be between 1 and 180"}), 400
+    if future_days < 1 or future_days > 90:
+        return jsonify({'error': "'future_days' must be between 1 and 90"}), 400
 
     strategy = request.args.get('strategy', 'moving_avg')
     
     if strategy == 'prophet' and Prophet is None:
         return jsonify({
-            'error': 'Prophet is not available. Please try another prediction method.'
+            'error': 'Prophet is not available. Please use another prediction method.',
+            'available_methods': ['moving_avg', 'linear_regression', 'holt_winters', 'arima', 'random_forest']
         }), 400
 
-    print(f"\n→ Fetching data for {ticker}...")
+    print(f"\n📈 Processing: {ticker.upper()} | Strategy: {strategy} | Days: {future_days}")
 
-    try:
-        df = yf.download(ticker, period='2y', interval='1d', progress=False, auto_adjust=True)
-        
-        if df.empty:
-            return jsonify({'error': f"No data found for ticker '{ticker}'. Please check the ticker symbol."}), 404
-        
-        print(f"✓ Downloaded {len(df)} data points")
-            
-    except Exception as e:
-        tb = traceback.format_exc()
-        logging.error(f"Error downloading data for {ticker}: {tb}")
-        return jsonify({'error': 'Failed to fetch data from yfinance', 'details': str(e)}), 500
+    # Use enhanced download for Indian stocks
+    df = download_indian_stock(ticker)
+    
+    if df.empty:
+        return jsonify({
+            'error': f"No data found for '{ticker}' on Render servers.",
+            'suggestion': f"Try: {get_working_ticker(ticker)}",
+            'working_examples': ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ITC'],
+            'tip': 'Use stock names without .NS/.BO suffix (e.g., RELIANCE not RELIANCE.NS)'
+        }), 404
+
+    print(f"✅ Downloaded {len(df)} trading days of data")
 
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.droplevel(1)
     
     if 'Close' not in df.columns:
-        return jsonify({'error': f"No 'Close' data found for ticker '{ticker}'"}), 404
+        return jsonify({'error': f"No 'Close' price data for {ticker}"}), 404
 
     df = df.sort_index()
     df.index.name = 'Date'
@@ -361,7 +465,7 @@ def predict():
 
     try:
         last_close = float(df['Close'].iloc[-1])
-        print(f"✓ Last close price: ₹{last_close:.2f}")
+        print(f"💰 Last close: ₹{last_close:.2f}")
     except Exception:
         last_close = None
 
@@ -381,10 +485,10 @@ def predict():
                 'ma50': float(row['MA50']) if pd.notna(row['MA50']) else None
             })
     except Exception as e:
-        logging.error(f"Error preparing history: {str(e)}")
+        print(f"⚠ Error preparing history: {str(e)}")
         history = []
 
-    print(f"→ Running {strategy} prediction for {future_days} days...")
+    print(f"🎯 Running {strategy} prediction...")
 
     try:
         if strategy == 'prophet':
@@ -402,38 +506,42 @@ def predict():
         else:
             return jsonify({'error': 'Invalid strategy'}), 400
 
-        print(f"✓ Prediction completed successfully!\n")
+        print(f"✅ Prediction completed successfully!\n")
 
         return jsonify({
             'ticker': ticker.upper(),
             'last_close': last_close,
             'history': history,
             'forecast': forecast,
-            'metrics': metrics
+            'metrics': metrics,
+            'data_points': len(df),
+            'period': f"{df.index[0].date()} to {df.index[-1].date()}"
         })
         
     except Exception as e:
         tb = traceback.format_exc()
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(f"\n\n=== ERROR at predict for {ticker} ===\n")
-            f.write(tb)
-        logging.error(tb)
-        print(f"✗ Error: {str(e)}\n")
-        return jsonify({'error': 'Prediction failed', 'details': str(e)}), 500
+        print(f"❌ Prediction error: {str(e)}")
+        logging.error(f"Prediction failed for {ticker}: {str(e)}")
+        
+        return jsonify({
+            'error': 'Prediction failed',
+            'details': str(e),
+            'suggestion': 'Try a different prediction method or fewer days'
+        }), 500
 
 @app.route('/compare')
 def compare():
-    """NEW: Compare multiple stocks"""
+    """Compare multiple Indian stocks"""
     tickers = request.args.get('tickers', '').split(',')
     tickers = [t.strip() for t in tickers if t.strip()]
     
     if not tickers or len(tickers) > 5:
-        return jsonify({'error': 'Please provide 1-5 ticker symbols'}), 400
+        return jsonify({'error': 'Please provide 1-5 Indian stock symbols'}), 400
     
     results = {}
     for ticker in tickers:
         try:
-            df = yf.download(ticker, period='1y', interval='1d', progress=False, auto_adjust=True)
+            df = download_indian_stock(ticker)
             if df.empty:
                 continue
                 
@@ -451,24 +559,35 @@ def compare():
             # Get metrics
             metrics = get_stock_metrics(df)
             
-            results[ticker] = {
+            results[ticker.upper()] = {
                 'returns_1y': round(returns, 2),
                 'current_price': round(end_price, 2),
                 'volatility': metrics['volatility'],
-                'trend_30d': metrics['trend_30d']
+                'trend_30d': metrics['trend_30d'],
+                'high_52w': metrics['high_52w'],
+                'low_52w': metrics['low_52w']
             }
         except Exception as e:
-            logging.error(f"Error comparing {ticker}: {str(e)}")
+            print(f"⚠ Error comparing {ticker}: {str(e)}")
             continue
     
     return jsonify(results)
 
+@app.route('/supported-stocks')
+def supported_stocks():
+    """List all supported Indian stocks"""
+    return jsonify({
+        'indian_stocks': INDIAN_STOCK_MAP,
+        'total': len(INDIAN_STOCK_MAP),
+        'tip': 'Use stock names without suffix (e.g., RELIANCE not RELIANCE.NS)'
+    })
+
 if __name__ == '__main__':
-    # Get port from environment variable (Render provides this)
     port = int(os.environ.get("PORT", 5000))
     
-    print("\n✓ Server ready!")
-    print(f"→ Listening on 0.0.0.0:{port}\n")
+    print(f"\n✅ Server ready on port {port}")
+    print(f"🌐 Access at: http://0.0.0.0:{port}")
+    print(f"📊 Supported Indian Stocks: {len(INDIAN_STOCK_MAP)}")
+    print(f"🤖 Prophet available: {'Yes' if Prophet else 'No'}\n")
     
-    # For production deployment (Render, Heroku, etc.)
     app.run(debug=False, host='0.0.0.0', port=port)
